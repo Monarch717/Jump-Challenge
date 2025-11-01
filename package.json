@@ -11,7 +11,14 @@
   "dependencies": {
     "react": "19.2.0",
     "react-dom": "19.2.0",
-    "next": "16.0.1"
+    "next": "16.0.1",
+    "googleapis": "^144.0.0",
+    "openai": "^4.67.3",
+    "ai": "^4.0.0",
+    "better-sqlite3": "^11.6.0",
+    "jose": "^5.9.6",
+    "cheerio": "^1.0.0",
+    "puppeteer": "^23.10.4"
   },
   "devDependencies": {
     "babel-plugin-react-compiler": "1.0.0",
@@ -19,6 +26,7 @@
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "@types/better-sqlite3": "^7.6.11",
     "@tailwindcss/postcss": "^4",
     "tailwindcss": "^4",
     "eslint": "^9",
