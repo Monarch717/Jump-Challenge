@@ -16,15 +16,43 @@ interface DashboardClientProps {
   userEmail: string;
 }
 
+interface GmailAccount {
+  id: number;
+  email: string;
+  created_at: number;
+}
+
 export default function DashboardClient({ initialCategories, userEmail }: DashboardClientProps) {
   const router = useRouter();
   const [categories, setCategories] = useState<Category[]>(initialCategories);
+  const [accounts, setAccounts] = useState<GmailAccount[]>([]);
+  const [loadingAccounts, setLoadingAccounts] = useState(false);
   const [showAddForm, setShowAddForm] = useState(false);
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [loading, setLoading] = useState(false);
   const [importing, setImporting] = useState(false);
   const [importResult, setImportResult] = useState<string | null>(null);
+
+  // Load connected accounts on mount
+  useEffect(() => {
+    loadAccounts();
+  }, []);
+
+  async function loadAccounts() {
+    setLoadingAccounts(true);
+    try {
+      const response = await fetch('/api/accounts/list');
+      if (response.ok) {
+        const data = await response.json();
+        setAccounts(data.accounts);
+      }
+    } catch (error) {
+      console.error('Error loading accounts:', error);
+    } finally {
+      setLoadingAccounts(false);
+    }
+  }
 
   async function handleCreateCategory(e: React.FormEvent) {
     e.preventDefault();
@@ -80,6 +108,34 @@ export default function DashboardClient({ initialCategories, userEmail }: Dashbo
     router.push('/');
   }
 
+  async function handleSwitchAccount(accountId: number) {
+    try {
+      const response = await fetch('/api/accounts/switch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ accountId }),
+      });
+      
+      if (response.ok) {
+        // Reload page to refresh dashboard with new account
+        window.location.reload();
+      } else {
+        const data = await response.json();
+        alert(`Failed to switch account: ${data.error}`);
+      }
+    } catch (error) {
+      console.error('Error switching account:', error);
+      alert('Failed to switch account');
+    }
+  }
+
+  async function handleConnectAnotherAccount() {
+    // Instead of logging out, we'll open OAuth in a popup
+    // For now, just redirect to home page where they can sign in
+    // The OAuth callback will add the account without switching
+    router.push('/?addAccount=true');
+  }
+
   return (
     <div className="min-h-screen bg-zinc-50 dark:bg-black">
       <div className="mx-auto max-w-6xl px-4 py-8">
@@ -103,13 +159,36 @@ export default function DashboardClient({ initialCategories, userEmail }: Dashbo
               Gmail Accounts
             </h2>
             <p className="mb-4 text-sm text-zinc-600 dark:text-zinc-400">
-              Currently connected: {userEmail}
+              Currently active: {userEmail}
             </p>
+            {loadingAccounts ? (
+              <p className="text-sm text-zinc-500">Loading accounts...</p>
+            ) : accounts.length > 0 ? (
+              <div className="space-y-2 mb-4">
+                {accounts.map((account) => (
+                  <button
+                    key={account.id}
+                    onClick={() => handleSwitchAccount(account.id)}
+                    className={`w-full rounded-lg px-3 py-2 text-sm transition-colors ${
+                      account.email === userEmail
+                        ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200 cursor-default'
+                        : 'bg-zinc-100 text-zinc-700 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700'
+                    }`}
+                    disabled={account.email === userEmail}
+                  >
+                    {account.email === userEmail && '✓ '}
+                    {account.email}
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-zinc-500 mb-4">No accounts connected</p>
+            )}
             <button
-              onClick={() => router.push('/')}
+              onClick={handleConnectAnotherAccount}
               className="w-full rounded-lg bg-blue-600 px-4 py-2 text-sm text-white hover:bg-blue-700"
             >
-              Connect Another Account
+              + Connect Another Account
             </button>
           </div>
 

@@ -13,9 +13,14 @@ export default function Home() {
   }, []);
 
   async function checkAuth() {
+    // Check if we're in "add account" mode
+    const params = new URLSearchParams(window.location.search);
+    const addAccount = params.get('addAccount') === 'true';
+    
     try {
       const response = await fetch('/api/auth/check');
-      if (response.ok) {
+      if (response.ok && !addAccount) {
+        // Only redirect if not adding an account
         router.push('/dashboard');
         return;
       }

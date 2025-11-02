@@ -7,9 +7,10 @@ import { cookies } from 'next/headers';
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
   const code = searchParams.get('code');
+  const origin = request.nextUrl.origin;
 
   if (!code) {
-    return NextResponse.redirect(new URL('/?error=no_code', request.url));
+    return NextResponse.redirect(new URL('/?error=no_code', origin));
   }
 
   try {
@@ -22,7 +23,7 @@ export async function GET(request: NextRequest) {
     const { tokens } = await oauth2Client.getToken(code);
 
     if (!tokens.access_token) {
-      return NextResponse.redirect(new URL('/?error=no_token', request.url));
+      return NextResponse.redirect(new URL('/?error=no_token', origin));
     }
 
     // Get user info
@@ -39,7 +40,7 @@ export async function GET(request: NextRequest) {
       
       if (!email) {
         console.error('No email in userinfo:', userInfo.data);
-        return NextResponse.redirect(new URL('/?error=no_email', request.url));
+        return NextResponse.redirect(new URL('/?error=no_email', origin));
       }
       
       // Save or update user in database
@@ -82,7 +83,7 @@ export async function GET(request: NextRequest) {
         path: '/',
       });
 
-      return NextResponse.redirect(new URL('/dashboard', request.url));
+      return NextResponse.redirect(new URL('/dashboard', origin));
     } catch (userInfoError: any) {
       console.error('Error getting user info:', userInfoError);
       // If userinfo fails, try to get email from token ID if available
@@ -131,7 +132,7 @@ export async function GET(request: NextRequest) {
                 path: '/',
               });
 
-              return NextResponse.redirect(new URL('/dashboard', request.url));
+              return NextResponse.redirect(new URL('/dashboard', origin));
             }
           }
         } catch (decodeError) {
@@ -139,11 +140,11 @@ export async function GET(request: NextRequest) {
         }
       }
       
-      return NextResponse.redirect(new URL('/?error=auth_failed&details=' + encodeURIComponent(userInfoError.message || 'Unknown error'), request.url));
+      return NextResponse.redirect(new URL('/?error=auth_failed&details=' + encodeURIComponent(userInfoError.message || 'Unknown error'), origin));
     }
   } catch (error) {
     console.error('OAuth callback error:', error);
-    return NextResponse.redirect(new URL('/?error=auth_failed', request.url));
+    return NextResponse.redirect(new URL('/?error=auth_failed', origin));
   }
 }
 

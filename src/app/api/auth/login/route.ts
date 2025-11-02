@@ -18,7 +18,7 @@ export async function GET() {
   const authUrl = oauth2Client.generateAuthUrl({
     access_type: 'offline',
     scope: scopes,
-    prompt: 'consent',
+    prompt: 'consent select_account', // Show account picker and request consent
   });
 
   return NextResponse.json({ authUrl });
