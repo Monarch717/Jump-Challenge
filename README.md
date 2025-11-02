@@ -34,7 +34,7 @@ An intelligent email organization app that automatically categorizes and summari
    - Add scopes: `https://www.googleapis.com/auth/gmail.readonly` and `https://www.googleapis.com/auth/gmail.modify`
 6. Create OAuth 2.0 Client ID:
    - Application type: Web application
-   - Authorized redirect URIs: `http://localhost:3000/api/auth/callback` (add your production URL for deployment)
+   - Authorized redirect URIs: `http://localhost:3000/api/auth/callback/google` (add your production URL for deployment)
 7. Copy the Client ID and Client Secret
 
 ### 3. Environment Variables
@@ -45,7 +45,7 @@ Create a `.env.local` file in the root directory:
 # Google OAuth Credentials
 NEXT_PUBLIC_GOOGLE_CLIENT_ID=your_google_client_id_here
 NEXT_PUBLIC_GOOGLE_CLIENT_SECRET=your_google_client_secret_here
-NEXT_PUBLIC_GOOGLE_REDIRECT_URI=http://localhost:3000/api/auth/callback
+NEXT_PUBLIC_GOOGLE_REDIRECT_URI=http://localhost:3000/api/auth/callback/google
 
 # OpenRouter API Key (for AI categorization and summarization)
 OPENROUTER_API_KEY=your_openrouter_api_key_here
