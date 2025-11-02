@@ -15,7 +15,7 @@ export async function getGmailClient(userId: number) {
   const oauth2Client = new google.auth.OAuth2(
     process.env.GOOGLE_CLIENT_ID,
     process.env.GOOGLE_CLIENT_SECRET,
-    process.env.GOOGLE_REDIRECT_URI || 'http://localhost:3000/api/auth/callback/google'
+    process.env.GOOGLE_REDIRECT_URI || 'http://localhost:3000/api/auth/callback'
   );
 
   oauth2Client.setCredentials({
@@ -105,14 +105,17 @@ export async function fetchNewEmails(userId: number) {
 export async function archiveEmail(userId: number, gmailId: string) {
   const gmail = await getGmailClient(userId);
   
+  // Archive email by removing INBOX label and marking as read
   await gmail.users.messages.modify({
     userId: 'me',
     id: gmailId,
     requestBody: {
-      removeLabelIds: ['INBOX'],
+      removeLabelIds: ['INBOX', 'UNREAD'], // Remove both INBOX and UNREAD labels
       addLabelIds: [],
     },
   });
+  
+  console.log(`Email ${gmailId} archived successfully (removed from INBOX and marked as read)`);
 }
 
 export async function deleteEmail(userId: number, gmailId: string): Promise<boolean> {

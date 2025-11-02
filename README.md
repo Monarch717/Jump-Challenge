@@ -34,7 +34,7 @@ An intelligent email organization app that automatically categorizes and summari
    - Add scopes: `https://www.googleapis.com/auth/gmail.readonly` and `https://www.googleapis.com/auth/gmail.modify`
 6. Create OAuth 2.0 Client ID:
    - Application type: Web application
-   - Authorized redirect URIs: `http://localhost:3000/api/auth/callback/google` (add your production URL for deployment)
+   - Authorized redirect URIs: `http://localhost:3000/api/auth/callback` (add your production URL for deployment)
 7. Copy the Client ID and Client Secret
 
 ### 3. Environment Variables

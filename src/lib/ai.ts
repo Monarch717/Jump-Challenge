@@ -38,6 +38,8 @@ Respond with ONLY the category ID number (e.g., "1", "2", etc.) that best matche
 
   try {
     const client = getOpenRouterClient();
+    console.log(`Calling OpenRouter for categorization with model: ${process.env.OPENROUTER_MODEL || 'openai/gpt-4o-mini'}`);
+    
     const response = await client.chat.completions.create({
       model: process.env.OPENROUTER_MODEL || 'openai/gpt-4o-mini',
       messages: [
@@ -55,20 +57,29 @@ Respond with ONLY the category ID number (e.g., "1", "2", etc.) that best matche
     });
 
     const result = response.choices[0]?.message?.content?.trim() || 'null';
+    console.log(`AI categorization response: "${result}"`);
     
     if (result === 'null') {
+      console.log('AI returned null, no category matched');
       return null;
     }
     
     const categoryId = parseInt(result, 10);
 
     if (isNaN(categoryId)) {
+      console.error(`AI returned non-numeric value: "${result}"`);
       return null;
     }
 
     // Verify the category ID exists
     const category = categories.find((cat) => cat.id === categoryId);
-    return category ? categoryId : null;
+    if (!category) {
+      console.error(`Category ID ${categoryId} not found in user's categories`);
+      return null;
+    }
+    
+    console.log(`Email categorized into: ${category.name} (ID: ${categoryId})`);
+    return categoryId;
   } catch (error) {
     console.error('Error categorizing email:', error);
     return null;

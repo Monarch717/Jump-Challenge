@@ -27,9 +27,11 @@ export async function POST(request: NextRequest) {
 
     // Fetch new emails
     const emails = await fetchNewEmails(session.userId);
+    console.log(`Found ${emails.length} new unread emails to process`);
     let importedCount = 0;
 
     for (const email of emails) {
+      console.log(`Processing email: ${email.subject || email.gmailId}`);
       try {
         // Check if email already exists
         const existing = db
@@ -37,17 +39,20 @@ export async function POST(request: NextRequest) {
           .get(session.userId, email.gmailId);
 
         if (existing) {
+          console.log(`Email ${email.gmailId} already imported, skipping`);
           continue;
         }
 
         // Categorize email using AI and category descriptions
         let categoryId: number | null = null;
         try {
+          console.log(`Categorizing email: ${email.subject}`);
           categoryId = await categorizeEmail(
             email.subject || '',
             email.bodyText || email.snippet || '',
             categories
           );
+          console.log(`Email categorized into category ID: ${categoryId}`);
         } catch (catError) {
           console.error(`Error categorizing email ${email.gmailId}:`, catError);
           // Continue without category if categorization fails
@@ -56,16 +61,19 @@ export async function POST(request: NextRequest) {
         // Summarize email using AI
         let summary = 'Unable to generate summary.';
         try {
+          console.log(`Summarizing email: ${email.subject}`);
           summary = await summarizeEmail(
             email.subject || '',
             email.bodyText || email.snippet || ''
           );
+          console.log(`Summary generated: ${summary.substring(0, 100)}...`);
         } catch (sumError) {
           console.error(`Error summarizing email ${email.gmailId}:`, sumError);
           // Continue with default summary if summarization fails
         }
 
         // Save email to database
+        console.log(`Saving email to database: ${email.subject}`);
         db.prepare(
           `INSERT INTO emails (
             user_id, category_id, gmail_id, thread_id, subject, from_email, from_name,
@@ -88,6 +96,7 @@ export async function POST(request: NextRequest) {
 
         // Archive email in Gmail (remove from INBOX, not delete)
         try {
+          console.log(`Archiving email in Gmail: ${email.gmailId}`);
           await archiveEmail(session.userId, email.gmailId);
         } catch (archiveError) {
           console.error(`Error archiving email ${email.gmailId}:`, archiveError);
@@ -95,6 +104,7 @@ export async function POST(request: NextRequest) {
         }
 
         importedCount++;
+        console.log(`Successfully imported email: ${email.subject}`);
       } catch (emailError) {
         console.error(`Error processing email ${email.gmailId}:`, emailError);
         // Continue with next email even if this one fails
