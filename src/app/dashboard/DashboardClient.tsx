@@ -249,27 +249,6 @@ export default function DashboardClient({ initialCategories, userEmail }: Dashbo
             ) : (
               <p className="text-sm text-zinc-500 mb-4">No accounts connected</p>
             )}
-            
-            {/* Show unlinked accounts that can be linked */}
-            {unlinkedAccounts.length > 0 && (
-              <div className="mb-4 rounded-lg border border-yellow-600 bg-yellow-50 p-3 dark:bg-yellow-900/20 dark:border-yellow-700">
-                <p className="mb-2 text-xs font-medium text-yellow-800 dark:text-yellow-200">
-                  Unlinked accounts found:
-                </p>
-                <div className="space-y-1">
-                  {unlinkedAccounts.map((account) => (
-                    <button
-                      key={account.id}
-                      onClick={() => handleLinkAccount(account.id)}
-                      disabled={linkingAccount}
-                      className="w-full rounded px-2 py-1 text-xs text-yellow-700 hover:bg-yellow-100 dark:text-yellow-300 dark:hover:bg-yellow-900/40 disabled:opacity-50"
-                    >
-                      {linkingAccount ? 'Linking...' : `+ Link ${account.email}`}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
             <button
               onClick={handleConnectAnotherAccount}
               className="w-full rounded-lg bg-blue-600 px-4 py-2 text-sm text-white hover:bg-blue-700"
