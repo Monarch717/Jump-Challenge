@@ -29,9 +29,25 @@ function initializeSchema(database: Database.Database) {
       access_token TEXT NOT NULL,
       refresh_token TEXT,
       token_expires_at INTEGER,
-      created_at INTEGER DEFAULT (strftime('%s', 'now'))
+      account_group_id INTEGER,
+      created_at INTEGER DEFAULT (strftime('%s', 'now')),
+      FOREIGN KEY (account_group_id) REFERENCES users(id) ON DELETE SET NULL
     )
   `);
+  
+  // Add account_group_id column if it doesn't exist (migration for existing databases)
+  try {
+    // Check if column exists by trying to query it
+    database.prepare('SELECT account_group_id FROM users LIMIT 1').get();
+  } catch {
+    // Column doesn't exist, add it
+    try {
+      database.exec(`ALTER TABLE users ADD COLUMN account_group_id INTEGER`);
+    } catch (error: any) {
+      // If it still fails, log but don't throw (might be some other issue)
+      console.error('Failed to add account_group_id column:', error);
+    }
+  }
 
   // Categories table
   database.exec(`

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { google } from 'googleapis';
 import { getDb } from '@/lib/db';
-import { createSession } from '@/lib/auth';
+import { createSession, getSession } from '@/lib/auth';
 import { cookies } from 'next/headers';
 
 export async function GET(request: NextRequest) {
@@ -54,6 +54,10 @@ export async function GET(request: NextRequest) {
         return NextResponse.redirect(getRedirectUrl('/?error=no_email'));
       }
       
+      // Check if user is already logged in (adding another account)
+      const existingSession = await getSession();
+      const isAddingAccount = existingSession !== null;
+      
       // Save or update user in database
       const db = getDb();
       let user = db.prepare('SELECT id FROM users WHERE email = ?').get(email) as { id: number } | undefined;
@@ -70,31 +74,44 @@ export async function GET(request: NextRequest) {
         );
       } else {
         // Create new user
+        // If adding account (session exists), link it to the current session's account group
+        // Otherwise, account_group_id is NULL (standalone or group owner)
+        const accountGroupId = isAddingAccount ? existingSession!.userId : null;
+        
         const result = db
           .prepare(
-            'INSERT INTO users (email, access_token, refresh_token, token_expires_at) VALUES (?, ?, ?, ?)'
+            'INSERT INTO users (email, access_token, refresh_token, token_expires_at, account_group_id) VALUES (?, ?, ?, ?, ?)'
           )
           .run(
             email,
             tokens.access_token,
             tokens.refresh_token || null,
-            tokens.expiry_date || null
+            tokens.expiry_date || null,
+            accountGroupId
           );
         user = { id: result.lastInsertRowid as number };
       }
 
-      // Create session
-      const sessionToken = await createSession(user.id, email);
-      const cookieStore = await cookies();
-      cookieStore.set('session', sessionToken, {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: 'lax',
-        maxAge: 60 * 60 * 24 * 7, // 7 days
-        path: '/',
-      });
+      // Handle session creation - preserve existing session if adding account
+      if (isAddingAccount) {
+        // User is already logged in - just add the account, don't switch sessions
+        console.log(`Added new account: ${email} (keeping current session for: ${existingSession!.email})`);
+        // Return to dashboard - account will be added but session stays the same
+        return NextResponse.redirect(getRedirectUrl('/dashboard'));
+      } else {
+        // New login - create session for this account
+        const sessionToken = await createSession(user.id, email);
+        const cookieStore = await cookies();
+        cookieStore.set('session', sessionToken, {
+          httpOnly: true,
+          secure: process.env.NODE_ENV === 'production',
+          sameSite: 'lax',
+          maxAge: 60 * 60 * 24 * 7, // 7 days
+          path: '/',
+        });
 
-      return NextResponse.redirect(getRedirectUrl('/dashboard'));
+        return NextResponse.redirect(getRedirectUrl('/dashboard'));
+      }
     } catch (userInfoError: any) {
       console.error('Error getting user info:', userInfoError);
       // If userinfo fails, try to get email from token ID if available
@@ -110,6 +127,10 @@ export async function GET(request: NextRequest) {
               const db = getDb();
               let user = db.prepare('SELECT id FROM users WHERE email = ?').get(email) as { id: number } | undefined;
 
+              // Check if user is already logged in (adding another account)
+              const existingSession = await getSession();
+              const isAddingAccount = existingSession !== null;
+
               if (user) {
                 db.prepare(
                   'UPDATE users SET access_token = ?, refresh_token = ?, token_expires_at = ? WHERE id = ?'
@@ -120,30 +141,39 @@ export async function GET(request: NextRequest) {
                   user.id
                 );
               } else {
+                // Create new user with account_group_id
+                const accountGroupId = isAddingAccount ? existingSession!.userId : null;
                 const result = db
                   .prepare(
-                    'INSERT INTO users (email, access_token, refresh_token, token_expires_at) VALUES (?, ?, ?, ?)'
+                    'INSERT INTO users (email, access_token, refresh_token, token_expires_at, account_group_id) VALUES (?, ?, ?, ?, ?)'
                   )
                   .run(
                     email,
                     tokens.access_token,
                     tokens.refresh_token || null,
-                    tokens.expiry_date || null
+                    tokens.expiry_date || null,
+                    accountGroupId
                   );
                 user = { id: result.lastInsertRowid as number };
               }
 
-              const sessionToken = await createSession(user.id, email);
-              const cookieStore = await cookies();
-              cookieStore.set('session', sessionToken, {
-                httpOnly: true,
-                secure: process.env.NODE_ENV === 'production',
-                sameSite: 'lax',
-                maxAge: 60 * 60 * 24 * 7,
-                path: '/',
-              });
+              // Handle session - preserve if adding account
+              if (isAddingAccount) {
+                console.log(`Added new account: ${email} (keeping current session for: ${existingSession!.email})`);
+                return NextResponse.redirect(getRedirectUrl('/dashboard'));
+              } else {
+                const sessionToken = await createSession(user.id, email);
+                const cookieStore = await cookies();
+                cookieStore.set('session', sessionToken, {
+                  httpOnly: true,
+                  secure: process.env.NODE_ENV === 'production',
+                  sameSite: 'lax',
+                  maxAge: 60 * 60 * 24 * 7,
+                  path: '/',
+                });
 
-              return NextResponse.redirect(getRedirectUrl('/dashboard'));
+                return NextResponse.redirect(getRedirectUrl('/dashboard'));
+              }
             }
           }
         } catch (decodeError) {
