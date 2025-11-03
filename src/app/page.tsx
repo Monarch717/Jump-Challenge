@@ -14,8 +14,12 @@ export default function Home() {
 
   async function checkAuth() {
     // Check if we're in "add account" mode
-    const params = new URLSearchParams(window.location.search);
-    const addAccount = params.get('addAccount') === 'true';
+    // Only access window in useEffect (client-side only)
+    let addAccount = false;
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      addAccount = params.get('addAccount') === 'true';
+    }
     
     try {
       const response = await fetch('/api/auth/check');
