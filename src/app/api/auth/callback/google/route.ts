@@ -7,10 +7,21 @@ import { cookies } from 'next/headers';
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
   const code = searchParams.get('code');
-  const origin = request.nextUrl.origin;
+  
+  // Build redirect URLs using request.nextUrl - more reliable than origin
+  const getRedirectUrl = (path: string) => {
+    const url = new URL(path, request.nextUrl.origin);
+    // If behind a proxy, try to use the actual request URL
+    const forwardedHost = request.headers.get('x-forwarded-host');
+    const forwardedProto = request.headers.get('x-forwarded-proto');
+    if (forwardedHost) {
+      return new URL(path, `${forwardedProto || 'https'}://${forwardedHost}`);
+    }
+    return url;
+  };
 
   if (!code) {
-    return NextResponse.redirect(new URL('/?error=no_code', origin));
+    return NextResponse.redirect(getRedirectUrl('/?error=no_code'));
   }
 
   try {
@@ -23,7 +34,7 @@ export async function GET(request: NextRequest) {
     const { tokens } = await oauth2Client.getToken(code);
 
     if (!tokens.access_token) {
-      return NextResponse.redirect(new URL('/?error=no_token', origin));
+      return NextResponse.redirect(getRedirectUrl('/?error=no_token'));
     }
 
     // Get user info
@@ -40,7 +51,7 @@ export async function GET(request: NextRequest) {
       
       if (!email) {
         console.error('No email in userinfo:', userInfo.data);
-        return NextResponse.redirect(new URL('/?error=no_email', origin));
+        return NextResponse.redirect(getRedirectUrl('/?error=no_email'));
       }
       
       // Save or update user in database
@@ -83,7 +94,7 @@ export async function GET(request: NextRequest) {
         path: '/',
       });
 
-      return NextResponse.redirect(new URL('/dashboard', origin));
+      return NextResponse.redirect(getRedirectUrl('/dashboard'));
     } catch (userInfoError: any) {
       console.error('Error getting user info:', userInfoError);
       // If userinfo fails, try to get email from token ID if available
@@ -132,7 +143,7 @@ export async function GET(request: NextRequest) {
                 path: '/',
               });
 
-              return NextResponse.redirect(new URL('/dashboard', origin));
+              return NextResponse.redirect(getRedirectUrl('/dashboard'));
             }
           }
         } catch (decodeError) {
@@ -140,11 +151,11 @@ export async function GET(request: NextRequest) {
         }
       }
       
-      return NextResponse.redirect(new URL('/?error=auth_failed&details=' + encodeURIComponent(userInfoError.message || 'Unknown error'), origin));
+      return NextResponse.redirect(getRedirectUrl('/?error=auth_failed&details=' + encodeURIComponent(userInfoError.message || 'Unknown error')));
     }
   } catch (error) {
     console.error('OAuth callback error:', error);
-    return NextResponse.redirect(new URL('/?error=auth_failed', origin));
+    return NextResponse.redirect(getRedirectUrl('/?error=auth_failed'));
   }
 }
 
