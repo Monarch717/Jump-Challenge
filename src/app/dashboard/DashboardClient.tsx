@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState, useEffect, useCallback } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 
 interface Category {
@@ -24,6 +24,7 @@ interface GmailAccount {
 
 export default function DashboardClient({ initialCategories, userEmail }: DashboardClientProps) {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [categories, setCategories] = useState<Category[]>(initialCategories);
   const [accounts, setAccounts] = useState<GmailAccount[]>([]);
   const [loadingAccounts, setLoadingAccounts] = useState(false);
@@ -33,26 +34,90 @@ export default function DashboardClient({ initialCategories, userEmail }: Dashbo
   const [loading, setLoading] = useState(false);
   const [importing, setImporting] = useState(false);
   const [importResult, setImportResult] = useState<string | null>(null);
+  const [unlinkedAccounts, setUnlinkedAccounts] = useState<GmailAccount[]>([]);
+  const [linkingAccount, setLinkingAccount] = useState(false);
 
-  // Load connected accounts on mount
-  useEffect(() => {
-    loadAccounts();
-  }, []);
-
-  async function loadAccounts() {
+  const loadAccounts = useCallback(async () => {
     setLoadingAccounts(true);
     try {
       const response = await fetch('/api/accounts/list');
       if (response.ok) {
         const data = await response.json();
+        console.log('Accounts loaded from API:', data.accounts);
         setAccounts(data.accounts);
+      } else {
+        const errorData = await response.json();
+        console.error('Error loading accounts:', errorData);
       }
     } catch (error) {
       console.error('Error loading accounts:', error);
     } finally {
       setLoadingAccounts(false);
     }
-  }
+  }, []);
+
+  // Check for unlinked accounts that might need linking
+  const checkUnlinkedAccounts = useCallback(async () => {
+    try {
+      const response = await fetch('/api/accounts/link', { method: 'POST' });
+      if (response.ok) {
+        const data = await response.json();
+        if (data.availableAccounts && data.availableAccounts.length > 0) {
+          setUnlinkedAccounts(data.availableAccounts);
+        }
+      }
+    } catch (error) {
+      console.error('Error checking unlinked accounts:', error);
+    }
+  }, []);
+
+  const handleLinkAccount = async (accountId: number) => {
+    setLinkingAccount(true);
+    try {
+      const response = await fetch('/api/accounts/link', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ accountId }),
+      });
+
+      if (response.ok) {
+        // Reload accounts to show the newly linked account
+        await loadAccounts();
+        // Remove from unlinked list - use functional update to avoid stale closure
+        setUnlinkedAccounts(prev => prev.filter(a => a.id !== accountId));
+      } else {
+        const data = await response.json();
+        alert(`Failed to link account: ${data.error}`);
+      }
+    } catch (error) {
+      console.error('Error linking account:', error);
+      alert('Failed to link account');
+    } finally {
+      setLinkingAccount(false);
+    }
+  };
+
+  // Load connected accounts on mount and when account is added
+  useEffect(() => {
+    loadAccounts();
+    checkUnlinkedAccounts();
+    
+    // If we just came back from adding an account, reload and clean URL
+    if (searchParams?.get('accountAdded') === 'true') {
+      // Reload accounts after a short delay to ensure DB is updated
+      setTimeout(() => {
+        loadAccounts();
+        checkUnlinkedAccounts();
+        // Remove query parameter from URL
+        router.replace('/dashboard', { scroll: false });
+      }, 500);
+    }
+  }, [searchParams, router, loadAccounts, checkUnlinkedAccounts]);
+
+  // Debug: Log accounts state changes
+  useEffect(() => {
+    console.log('Accounts state updated:', accounts);
+  }, [accounts]);
 
   async function handleCreateCategory(e: React.FormEvent) {
     e.preventDefault();
@@ -183,6 +248,27 @@ export default function DashboardClient({ initialCategories, userEmail }: Dashbo
               </div>
             ) : (
               <p className="text-sm text-zinc-500 mb-4">No accounts connected</p>
+            )}
+            
+            {/* Show unlinked accounts that can be linked */}
+            {unlinkedAccounts.length > 0 && (
+              <div className="mb-4 rounded-lg border border-yellow-600 bg-yellow-50 p-3 dark:bg-yellow-900/20 dark:border-yellow-700">
+                <p className="mb-2 text-xs font-medium text-yellow-800 dark:text-yellow-200">
+                  Unlinked accounts found:
+                </p>
+                <div className="space-y-1">
+                  {unlinkedAccounts.map((account) => (
+                    <button
+                      key={account.id}
+                      onClick={() => handleLinkAccount(account.id)}
+                      disabled={linkingAccount}
+                      className="w-full rounded px-2 py-1 text-xs text-yellow-700 hover:bg-yellow-100 dark:text-yellow-300 dark:hover:bg-yellow-900/40 disabled:opacity-50"
+                    >
+                      {linkingAccount ? 'Linking...' : `+ Link ${account.email}`}
+                    </button>
+                  ))}
+                </div>
+              </div>
             )}
             <button
               onClick={handleConnectAnotherAccount}

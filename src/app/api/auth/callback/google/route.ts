@@ -64,19 +64,37 @@ export async function GET(request: NextRequest) {
 
       if (user) {
         // Update existing user
-        db.prepare(
-          'UPDATE users SET access_token = ?, refresh_token = ?, token_expires_at = ? WHERE id = ?'
-        ).run(
-          tokens.access_token,
-          tokens.refresh_token || null,
-          tokens.expiry_date || null,
-          user.id
-        );
+        // If adding account and this user isn't already linked, link them to the current group
+        if (isAddingAccount && user.id !== existingSession!.userId) {
+          const currentAccountGroupId = existingSession!.userId;
+          console.log(`Linking existing account ${email} (ID: ${user.id}) to group ${currentAccountGroupId}`);
+          db.prepare(
+            'UPDATE users SET access_token = ?, refresh_token = ?, token_expires_at = ?, account_group_id = ? WHERE id = ?'
+          ).run(
+            tokens.access_token,
+            tokens.refresh_token || null,
+            tokens.expiry_date || null,
+            currentAccountGroupId,
+            user.id
+          );
+        } else {
+          // Just update tokens, don't change group
+          db.prepare(
+            'UPDATE users SET access_token = ?, refresh_token = ?, token_expires_at = ? WHERE id = ?'
+          ).run(
+            tokens.access_token,
+            tokens.refresh_token || null,
+            tokens.expiry_date || null,
+            user.id
+          );
+        }
       } else {
         // Create new user
         // If adding account (session exists), link it to the current session's account group
         // Otherwise, account_group_id is NULL (standalone or group owner)
         const accountGroupId = isAddingAccount ? existingSession!.userId : null;
+        
+        console.log(`Creating new account: ${email}, account_group_id: ${accountGroupId}, isAddingAccount: ${isAddingAccount}`);
         
         const result = db
           .prepare(
@@ -90,14 +108,16 @@ export async function GET(request: NextRequest) {
             accountGroupId
           );
         user = { id: result.lastInsertRowid as number };
+        
+        console.log(`Created user ID: ${user.id}, linked to group: ${accountGroupId}`);
       }
 
       // Handle session creation - preserve existing session if adding account
       if (isAddingAccount) {
         // User is already logged in - just add the account, don't switch sessions
         console.log(`Added new account: ${email} (keeping current session for: ${existingSession!.email})`);
-        // Return to dashboard - account will be added but session stays the same
-        return NextResponse.redirect(getRedirectUrl('/dashboard'));
+        // Return to dashboard with accountAdded flag to trigger reload
+        return NextResponse.redirect(getRedirectUrl('/dashboard?accountAdded=true'));
       } else {
         // New login - create session for this account
         const sessionToken = await createSession(user.id, email);
@@ -132,14 +152,29 @@ export async function GET(request: NextRequest) {
               const isAddingAccount = existingSession !== null;
 
               if (user) {
-                db.prepare(
-                  'UPDATE users SET access_token = ?, refresh_token = ?, token_expires_at = ? WHERE id = ?'
-                ).run(
-                  tokens.access_token,
-                  tokens.refresh_token || null,
-                  tokens.expiry_date || null,
-                  user.id
-                );
+                // Update existing user - link to group if adding account
+                if (isAddingAccount && user.id !== existingSession!.userId) {
+                  const currentAccountGroupId = existingSession!.userId;
+                  console.log(`Linking existing account ${email} (ID: ${user.id}) to group ${currentAccountGroupId}`);
+                  db.prepare(
+                    'UPDATE users SET access_token = ?, refresh_token = ?, token_expires_at = ?, account_group_id = ? WHERE id = ?'
+                  ).run(
+                    tokens.access_token,
+                    tokens.refresh_token || null,
+                    tokens.expiry_date || null,
+                    currentAccountGroupId,
+                    user.id
+                  );
+                } else {
+                  db.prepare(
+                    'UPDATE users SET access_token = ?, refresh_token = ?, token_expires_at = ? WHERE id = ?'
+                  ).run(
+                    tokens.access_token,
+                    tokens.refresh_token || null,
+                    tokens.expiry_date || null,
+                    user.id
+                  );
+                }
               } else {
                 // Create new user with account_group_id
                 const accountGroupId = isAddingAccount ? existingSession!.userId : null;
@@ -160,7 +195,7 @@ export async function GET(request: NextRequest) {
               // Handle session - preserve if adding account
               if (isAddingAccount) {
                 console.log(`Added new account: ${email} (keeping current session for: ${existingSession!.email})`);
-                return NextResponse.redirect(getRedirectUrl('/dashboard'));
+                return NextResponse.redirect(getRedirectUrl('/dashboard?accountAdded=true'));
               } else {
                 const sessionToken = await createSession(user.id, email);
                 const cookieStore = await cookies();
