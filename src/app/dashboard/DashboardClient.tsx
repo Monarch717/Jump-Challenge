@@ -36,6 +36,9 @@ export default function DashboardClient({ initialCategories, userEmail }: Dashbo
   const [importResult, setImportResult] = useState<string | null>(null);
   const [unlinkedAccounts, setUnlinkedAccounts] = useState<GmailAccount[]>([]);
   const [linkingAccount, setLinkingAccount] = useState(false);
+  const [autoImportEnabled, setAutoImportEnabled] = useState(true);
+  const [lastAutoImport, setLastAutoImport] = useState<Date | null>(null);
+  const [autoImporting, setAutoImporting] = useState(false);
 
   const loadAccounts = useCallback(async () => {
     setLoadingAccounts(true);
@@ -119,6 +122,90 @@ export default function DashboardClient({ initialCategories, userEmail }: Dashbo
     console.log('Accounts state updated:', accounts);
   }, [accounts]);
 
+  const importEmails = useCallback(async (isAutoImport = false) => {
+    // Prevent concurrent imports
+    if (importing || autoImporting) {
+      return;
+    }
+
+    if (isAutoImport) {
+      setAutoImporting(true);
+    } else {
+      setImporting(true);
+      setImportResult(null);
+    }
+
+    try {
+      const response = await fetch('/api/emails/import', { method: 'POST' });
+      const data = await response.json();
+
+      if (response.ok) {
+        const resultMessage = `Imported ${data.imported} emails (${data.total} total found)`;
+        if (isAutoImport) {
+          setLastAutoImport(new Date());
+          // Only show result if emails were imported
+          if (data.imported > 0) {
+            setImportResult(resultMessage);
+            // Clear the result after 5 seconds
+            setTimeout(() => setImportResult(null), 5000);
+          }
+        } else {
+          setImportResult(resultMessage);
+        }
+      } else {
+        const errorMessage = `Error: ${data.error || 'Failed to import emails'}`;
+        if (!isAutoImport) {
+          setImportResult(errorMessage);
+        }
+      }
+    } catch (error) {
+      console.error('Import error:', error);
+      if (!isAutoImport) {
+        setImportResult('Failed to import emails');
+      }
+    } finally {
+      if (isAutoImport) {
+        setAutoImporting(false);
+      } else {
+        setImporting(false);
+      }
+    }
+  }, [importing, autoImporting]);
+
+  async function handleImportEmails() {
+    await importEmails(false);
+  }
+
+  // Automatic email import polling
+  useEffect(() => {
+    // Only poll if auto-import is enabled and user has categories
+    if (!autoImportEnabled || categories.length === 0) {
+      return;
+    }
+
+    // Initial import check after 30 seconds (give time for page to load)
+    const initialTimeout = setTimeout(() => {
+      if (!importing && !autoImporting) {
+        console.log('Auto-import: Performing initial check...');
+        importEmails(true);
+      }
+    }, 30000);
+
+    // Set up polling interval (check every 2 minutes)
+    const pollInterval = setInterval(() => {
+      if (!importing && !autoImporting && autoImportEnabled && categories.length > 0) {
+        console.log('Auto-import: Checking for new emails...');
+        importEmails(true);
+      }
+    }, 120000); // 2 minutes
+
+    // Cleanup
+    return () => {
+      clearTimeout(initialTimeout);
+      clearInterval(pollInterval);
+    };
+  }, [autoImportEnabled, categories.length, importing, autoImporting, importEmails]);
+
   async function handleCreateCategory(e: React.FormEvent) {
     e.preventDefault();
     if (!name.trim() || !description.trim()) return;
@@ -145,26 +232,6 @@ export default function DashboardClient({ initialCategories, userEmail }: Dashbo
       alert('Failed to create category');
     } finally {
       setLoading(false);
-    }
-  }
-
-  async function handleImportEmails() {
-    setImporting(true);
-    setImportResult(null);
-    try {
-      const response = await fetch('/api/emails/import', { method: 'POST' });
-      const data = await response.json();
-
-      if (response.ok) {
-        setImportResult(`Imported ${data.imported} emails (${data.total} total found)`);
-      } else {
-        setImportResult(`Error: ${data.error || 'Failed to import emails'}`);
-      }
-    } catch (error) {
-      console.error('Import error:', error);
-      setImportResult('Failed to import emails');
-    } finally {
-      setImporting(false);
     }
   }
 
@@ -328,19 +395,45 @@ export default function DashboardClient({ initialCategories, userEmail }: Dashbo
 
         {/* Import Emails Section */}
         <div className="mt-6 rounded-lg border border-zinc-200 bg-white p-6 dark:border-zinc-800 dark:bg-zinc-900">
-          <h2 className="mb-4 text-xl font-semibold text-black dark:text-zinc-50">
-            Import Emails
-          </h2>
+          <div className="mb-4 flex items-center justify-between">
+            <h2 className="text-xl font-semibold text-black dark:text-zinc-50">
+              Import Emails
+            </h2>
+            <div className="flex items-center gap-3">
+              <label className="flex items-center gap-2 text-sm text-zinc-600 dark:text-zinc-400">
+                <input
+                  type="checkbox"
+                  checked={autoImportEnabled}
+                  onChange={(e) => setAutoImportEnabled(e.target.checked)}
+                  disabled={categories.length === 0}
+                  className="h-4 w-4 rounded border-zinc-300 text-blue-600 focus:ring-blue-500 dark:border-zinc-600"
+                />
+                <span>Auto-import</span>
+              </label>
+            </div>
+          </div>
           <p className="mb-4 text-sm text-zinc-600 dark:text-zinc-400">
-            Import new emails from Gmail. They will be automatically categorized using AI based on your category descriptions.
+            {autoImportEnabled && categories.length > 0
+              ? 'New emails are automatically imported every 2 minutes and categorized using AI based on your category descriptions.'
+              : 'Import new emails from Gmail. They will be automatically categorized using AI based on your category descriptions.'}
           </p>
-          <button
-            onClick={handleImportEmails}
-            disabled={importing || categories.length === 0}
-            className="rounded-lg bg-blue-600 px-6 py-2 text-sm text-white hover:bg-blue-700 disabled:opacity-50"
-          >
-            {importing ? 'Importing...' : 'Import New Emails'}
-          </button>
+          <div className="flex items-center gap-4">
+            <button
+              onClick={handleImportEmails}
+              disabled={importing || autoImporting || categories.length === 0}
+              className="rounded-lg bg-blue-600 px-6 py-2 text-sm text-white hover:bg-blue-700 disabled:opacity-50"
+            >
+              {importing || autoImporting ? 'Importing...' : 'Import Now'}
+            </button>
+            {autoImporting && (
+              <span className="text-sm text-zinc-500">Auto-importing...</span>
+            )}
+            {lastAutoImport && !autoImporting && (
+              <span className="text-sm text-zinc-500">
+                Last checked: {lastAutoImport.toLocaleTimeString()}
+              </span>
+            )}
+          </div>
           {importResult && (
             <p className={`mt-4 text-sm ${importResult.includes('Error') ? 'text-red-600' : 'text-green-600'}`}>
               {importResult}
